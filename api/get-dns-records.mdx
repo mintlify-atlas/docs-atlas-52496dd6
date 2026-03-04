@@ -21,10 +21,10 @@ Get DNS records of a given type for a FQDN (fully qualified domain name).
   Fully qualified domain name, like `example.com` or `mail.google.com` (no protocol or path)
 </ParamField>
 
-<ParamField path="type" type="DnsRecordType" default="undefined">
+<ParamField path="type" type="DnsRecordType">
   DNS record type: `A`, `AAAA`, `TXT`, `CNAME`, `MX`, `NS`, `SOA`, `PTR`, `SRV`, `NAPTR`, `DS`, `DNSKEY`, `CAA`, etc.
   
-  If not specified, all record types will be queried.
+  If not specified, the behavior depends on the resolver. The `node-dns` resolver will query multiple types (A, AAAA, CNAME), while DNS-over-HTTPS resolvers may default to A records.
 </ParamField>
 
 <ParamField path="resolver" type="string" default="auto">
