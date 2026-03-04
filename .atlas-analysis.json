@@ -1,0 +1,68 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "DNS Records",
+  "projectDescription": "A DNS helper library that quickly discovers and retrieves all DNS records for any domain with cross-runtime support.",
+  "theme": "palm",
+  "primaryColor": "#848c8e",
+  "lightColor": "#11161e",
+  "darkColor": "#cfd0d2",
+  "navigation": {
+    "groups": [
+      {
+        "group": "Get Started",
+        "pages": [
+          "introduction",
+          "installation",
+          "quickstart"
+        ]
+      },
+      {
+        "group": "Core Concepts",
+        "pages": [
+          "concepts/dns-resolvers",
+          "concepts/record-types",
+          "concepts/wildcard-detection",
+          "concepts/subdomain-discovery"
+        ]
+      },
+      {
+        "group": "API Reference",
+        "pages": [
+          "api/get-dns-records",
+          "api/get-all-dns-records",
+          "api/get-all-dns-records-stream",
+          "api/detect-wildcard-records",
+          "api/parse-dns-record",
+          "api/types"
+        ]
+      },
+      {
+        "group": "Guides",
+        "pages": [
+          "guides/examples",
+          "guides/cross-runtime",
+          "guides/error-handling",
+          "guides/performance"
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Retrieve DNS records by type (A, AAAA, TXT, MX, CNAME, NS, etc.)",
+    "Discover all DNS records for a domain with subdomain enumeration",
+    "Automatic wildcard record detection",
+    "Streaming API for large result sets",
+    "Multiple DNS resolver support (Cloudflare, Google, Node.js, Deno)",
+    "Cross-runtime compatibility (browsers, Node.js, CloudFlare Workers, Deno, Bun)"
+  ],
+  "publicApiSurface": [
+    "getDnsRecords(name, type, resolver)",
+    "getAllDnsRecords(domain, options)",
+    "getAllDnsRecordsStream(domain, options)",
+    "detectWildcardRecords(domain, records, percent)",
+    "parseDnsRecord(record)",
+    "DnsRecord interface",
+    "DnsRecordType type",
+    "GetAllDnsRecordsOptions type"
+  ]
+}
