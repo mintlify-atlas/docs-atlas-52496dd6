@@ -1,0 +1,195 @@
+---
+title: Cross-runtime compatibility
+description: Use @layered/dns-records across Node.js, browsers, Deno, Bun, and CloudFlare Workers
+---
+
+The library works in all JavaScript runtimes with automatic runtime detection.
+
+## Runtime support
+
+@layered/dns-records is designed to work seamlessly across all JavaScript runtimes:
+
+- **Node.js** - Full support with multiple resolver options
+- **Browsers** - Full support using DNS over HTTPS
+- **Deno** - Full support with fetch-based resolvers
+- **Bun** - Full support with fetch-based resolvers
+- **CloudFlare Workers** - Full support with optimized resolver selection
+
+## DNS resolver compatibility
+
+Different DNS resolvers are available depending on your runtime environment.
+
+<Tabs>
+  <Tab title="Node.js">
+    Node.js supports all DNS resolvers:
+
+    ```typescript
+    import { getDnsRecords } from '@layered/dns-records'
+
+    // Using node-dns (default in Node.js)
+    const records1 = await getDnsRecords('example.com', 'A')
+
+    // Using node-dig (requires dig command)
+    const records2 = await getDnsRecords('example.com', 'TXT', 'node-dig')
+
+    // Using cloudflare-dns
+    const records3 = await getDnsRecords('example.com', 'MX', 'cloudflare-dns')
+
+    // Using google-dns
+    const records4 = await getDnsRecords('example.com', 'AAAA', 'google-dns')
+    ```
+
+    <Note>
+    `node-dns` is automatically selected as the default resolver in Node.js environments.
+    </Note>
+  </Tab>
+
+  <Tab title="Browser">
+    Browsers support DNS over HTTPS resolvers:
+
+    ```typescript
+    import { getDnsRecords } from '@layered/dns-records'
+
+    // Using google-dns (default in browsers)
+    const records1 = await getDnsRecords('example.com', 'A')
+
+    // Using cloudflare-dns
+    const records2 = await getDnsRecords('example.com', 'TXT', 'cloudflare-dns')
+    ```
+
+    <Tip>
+    `google-dns` is automatically selected as the default resolver in browser environments.
+    </Tip>
+  </Tab>
+
+  <Tab title="Deno">
+    Deno supports fetch-based DNS resolvers:
+
+    ```typescript
+    import { getDnsRecords } from '@layered/dns-records'
+
+    // Using google-dns (default in Deno)
+    const records1 = await getDnsRecords('example.com', 'A')
+
+    // Using cloudflare-dns
+    const records2 = await getDnsRecords('example.com', 'TXT', 'cloudflare-dns')
+    ```
+
+    <Note>
+    The native `deno-dns` resolver is not yet implemented. Use `google-dns` or `cloudflare-dns` instead.
+    </Note>
+  </Tab>
+
+  <Tab title="Bun">
+    Bun supports fetch-based DNS resolvers:
+
+    ```typescript
+    import { getDnsRecords } from '@layered/dns-records'
+
+    // Using google-dns (default in Bun)
+    const records1 = await getDnsRecords('example.com', 'A')
+
+    // Using cloudflare-dns
+    const records2 = await getDnsRecords('example.com', 'TXT', 'cloudflare-dns')
+    ```
+  </Tab>
+
+  <Tab title="CloudFlare Workers">
+    CloudFlare Workers automatically use the optimized resolver:
+
+    ```typescript
+    import { getDnsRecords } from '@layered/dns-records'
+
+    // Using cloudflare-dns (default in CloudFlare Workers)
+    const records1 = await getDnsRecords('example.com', 'A')
+
+    // Can also use google-dns if needed
+    const records2 = await getDnsRecords('example.com', 'TXT', 'google-dns')
+    ```
+
+    <Tip>
+    `cloudflare-dns` is automatically selected in CloudFlare Workers for optimal performance.
+    </Tip>
+  </Tab>
+</Tabs>
+
+## Automatic resolver selection
+
+The library automatically selects the best DNS resolver for your runtime environment.
+
+```typescript
+import { getDnsRecords, getAllDnsRecords } from '@layered/dns-records'
+
+// Resolver is automatically selected based on runtime
+const records = await getDnsRecords('example.com', 'A')
+const allRecords = await getAllDnsRecords('example.com')
+```
+
+### Selection logic
+
+The resolver selection follows this priority:
+
+1. **Node.js** - Uses `node-dns` (native Node.js DNS module)
+2. **CloudFlare Workers** - Uses `cloudflare-dns` (optimized for CF infrastructure)
+3. **Other runtimes** - Uses `google-dns` (works everywhere with fetch)
+
+<Accordion title="View implementation details">
+
+The automatic resolver selection is implemented in `get-dns-records.ts:5-13`:
+
+```typescript
+function bestDnsResolverForThisRuntime(): string {
+  if (globalThis.process?.release?.name === 'node') {
+    return 'node-dns'
+  } else if (globalThis.navigator?.userAgent === 'Cloudflare-Workers') {
+    return 'cloudflare-dns'
+  } else {
+    return 'google-dns'
+  }
+}
+```
+
+</Accordion>
+
+## Resolver comparison
+
+<Note>
+Choose the right resolver based on your runtime environment and requirements.
+</Note>
+
+| Resolver | Speed | Runtime requirement | Notes |
+| :------- | :---- | :------------------ | :---- |
+| `node-dns` | Fast | Node.js only | Uses native DNS module |
+| `node-dig` | Fast | Node.js + dig command | Requires `dig` installed |
+| `cloudflare-dns` | Fast | Requires fetch | Optimized for CF Workers |
+| `google-dns` | Fast | Requires fetch | Universal fallback |
+| `deno-dns` | - | Deno only | Not yet implemented |
+
+## Example: Universal DNS lookup
+
+Create a DNS lookup function that works in any runtime:
+
+```typescript
+import { getDnsRecords } from '@layered/dns-records'
+
+export async function universalDnsLookup(domain: string, type: string = 'A') {
+  try {
+    // Resolver is automatically selected
+    const records = await getDnsRecords(domain, type)
+    return {
+      success: true,
+      records,
+      count: records.length
+    }
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message
+    }
+  }
+}
+
+// Works in Node.js, browsers, Deno, Bun, CloudFlare Workers
+const result = await universalDnsLookup('example.com', 'TXT')
+console.log(result)
+```

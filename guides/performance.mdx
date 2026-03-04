@@ -1,0 +1,396 @@
+---
+title: Performance optimization
+description: Tips and techniques for optimizing DNS record lookups
+---
+
+Learn how to optimize DNS queries for better performance and efficiency.
+
+## Choosing the right API
+
+Select between the standard and streaming APIs based on your needs.
+
+### When to use `getAllDnsRecords`
+
+Use the standard API when you need all records before processing:
+
+```typescript
+import { getAllDnsRecords } from '@layered/dns-records'
+
+// Best for: Complete dataset needed before processing
+const records = await getAllDnsRecords('example.com')
+
+// Process all records at once
+const aRecords = records.filter(r => r.type === 'A')
+const txtRecords = records.filter(r => r.type === 'TXT')
+const mxRecords = records.filter(r => r.type === 'MX')
+
+console.log({
+  total: records.length,
+  byType: {
+    A: aRecords.length,
+    TXT: txtRecords.length,
+    MX: mxRecords.length
+  }
+})
+```
+
+<Note>
+`getAllDnsRecords()` waits for all DNS queries to complete and includes wildcard detection.
+</Note>
+
+### When to use `getAllDnsRecordsStream`
+
+Use the streaming API for real-time processing and better memory efficiency:
+
+```typescript
+import { getAllDnsRecordsStream, parseDnsRecord } from '@layered/dns-records'
+
+// Best for: Processing records as they arrive
+const stream = getAllDnsRecordsStream('example.com')
+const decoder = new TextDecoder()
+
+let count = 0
+
+for await (const record of stream) {
+  const recordLine = decoder.decode(record)
+  const dnsRecord = parseDnsRecord(recordLine)
+  
+  // Process immediately
+  console.log(`[${++count}] ${dnsRecord.type}: ${dnsRecord.data}`)
+  
+  // Early exit if you find what you need
+  if (dnsRecord.type === 'TXT' && dnsRecord.data.includes('v=spf1')) {
+    console.log('Found SPF record!')
+    // Continue or break based on your needs
+  }
+}
+```
+
+<Tip>
+Streaming is ideal for large domains, real-time display, or when you only need specific records.
+</Tip>
+
+## Choosing the right resolver
+
+Different resolvers have different performance characteristics.
+
+### Node.js resolver comparison
+
+<Tabs>
+  <Tab title="node-dns (Recommended)">
+    Fastest option for Node.js environments:
+
+    ```typescript
+    import { getDnsRecords } from '@layered/dns-records'
+
+    // Automatically selected in Node.js
+    const records = await getDnsRecords('example.com', 'A')
+
+    // Or explicitly specify
+    const records2 = await getDnsRecords('example.com', 'A', 'node-dns')
+    ```
+
+    **Pros:**
+    - Native Node.js module (fastest)
+    - No external dependencies
+    - Uses system DNS configuration
+
+    **Cons:**
+    - Node.js only
+    - TTL not always available for all record types
+  </Tab>
+
+  <Tab title="node-dig">
+    Fast with more detailed information:
+
+    ```typescript
+    import { getDnsRecords } from '@layered/dns-records'
+
+    const records = await getDnsRecords('example.com', 'A', 'node-dig')
+    ```
+
+    **Pros:**
+    - Full TTL information
+    - Detailed DNS response data
+    - Can specify custom DNS servers
+
+    **Cons:**
+    - Requires `dig` command installed
+    - Slightly slower than `node-dns`
+    - Node.js only
+  </Tab>
+
+  <Tab title="cloudflare-dns / google-dns">
+    Universal but network-dependent:
+
+    ```typescript
+    import { getDnsRecords } from '@layered/dns-records'
+
+    // Via CloudFlare
+    const records1 = await getDnsRecords('example.com', 'A', 'cloudflare-dns')
+
+    // Via Google
+    const records2 = await getDnsRecords('example.com', 'A', 'google-dns')
+    ```
+
+    **Pros:**
+    - Works in all runtimes
+    - Consistent results
+    - DNS over HTTPS (secure)
+
+    **Cons:**
+    - Network latency to external service
+    - Requires internet access
+    - Depends on third-party availability
+  </Tab>
+</Tabs>
+
+## Caching strategies
+
+Implement caching to reduce redundant DNS queries.
+
+### Simple TTL-based cache
+
+```typescript
+import { getDnsRecords, type DnsRecord } from '@layered/dns-records'
+
+class DnsCache {
+  private cache = new Map<string, { records: DnsRecord[], expires: number }>()
+
+  async get(domain: string, type: string = 'A'): Promise<DnsRecord[]> {
+    const key = `${domain}:${type}`
+    const cached = this.cache.get(key)
+
+    // Return cached if not expired
+    if (cached && cached.expires > Date.now()) {
+      console.log('Cache hit:', key)
+      return cached.records
+    }
+
+    // Fetch fresh records
+    console.log('Cache miss:', key)
+    const records = await getDnsRecords(domain, type)
+
+    // Cache with minimum TTL from records (default 5 minutes)
+    const minTtl = records.reduce((min, r) => Math.min(min, r.ttl), 300)
+    this.cache.set(key, {
+      records,
+      expires: Date.now() + (minTtl * 1000)
+    })
+
+    return records
+  }
+
+  clear() {
+    this.cache.clear()
+  }
+}
+
+const cache = new DnsCache()
+
+// First call - fetches from DNS
+const records1 = await cache.get('example.com', 'A')
+
+// Second call - returns from cache
+const records2 = await cache.get('example.com', 'A')
+```
+
+<Tip>
+Respect the TTL values in DNS records to balance between performance and freshness.
+</Tip>
+
+### Advanced caching with LRU
+
+For production applications, consider using an LRU cache:
+
+```typescript
+import { getDnsRecords, type DnsRecord } from '@layered/dns-records'
+import { LRUCache } from 'lru-cache'
+
+const dnsCache = new LRUCache<string, DnsRecord[]>({
+  max: 500, // Maximum number of items
+  ttl: 1000 * 60 * 5, // 5 minutes default TTL
+  updateAgeOnGet: true,
+  updateAgeOnHas: true,
+})
+
+async function getCachedDnsRecords(domain: string, type: string = 'A'): Promise<DnsRecord[]> {
+  const key = `${domain}:${type}`
+  
+  const cached = dnsCache.get(key)
+  if (cached) {
+    return cached
+  }
+  
+  const records = await getDnsRecords(domain, type)
+  
+  // Use minimum TTL from records
+  const minTtl = records.reduce((min, r) => Math.min(min, r.ttl), 300)
+  dnsCache.set(key, records, { ttl: minTtl * 1000 })
+  
+  return records
+}
+```
+
+## Parallel queries
+
+Fetch multiple record types simultaneously for better performance.
+
+### Query multiple record types
+
+```typescript
+import { getDnsRecords } from '@layered/dns-records'
+
+const domain = 'example.com'
+
+// Sequential (slow)
+const aRecords = await getDnsRecords(domain, 'A')
+const txtRecords = await getDnsRecords(domain, 'TXT')
+const mxRecords = await getDnsRecords(domain, 'MX')
+
+// Parallel (fast)
+const [aRecordsFast, txtRecordsFast, mxRecordsFast] = await Promise.all([
+  getDnsRecords(domain, 'A'),
+  getDnsRecords(domain, 'TXT'),
+  getDnsRecords(domain, 'MX'),
+])
+
+console.log('Records retrieved in parallel:', {
+  A: aRecordsFast.length,
+  TXT: txtRecordsFast.length,
+  MX: mxRecordsFast.length
+})
+```
+
+<Note>
+Parallel queries can reduce total lookup time by 3-5x when fetching multiple record types.
+</Note>
+
+### Query multiple domains
+
+```typescript
+import { getAllDnsRecords } from '@layered/dns-records'
+
+const domains = ['example.com', 'google.com', 'github.com']
+
+// Parallel lookups
+const results = await Promise.all(
+  domains.map(async domain => {
+    try {
+      const records = await getAllDnsRecords(domain)
+      return { domain, success: true, count: records.length }
+    } catch (error) {
+      return { domain, success: false, error: error.message }
+    }
+  })
+)
+
+results.forEach(result => {
+  if (result.success) {
+    console.log(`${result.domain}: ${result.count} records`)
+  } else {
+    console.error(`${result.domain}: ${result.error}`)
+  }
+})
+```
+
+## Optimizing subdomain discovery
+
+Control which subdomains are checked to balance completeness and speed.
+
+### Disable common subdomain checks
+
+Skip common subdomain checks if you only need root domain records:
+
+```typescript
+import { getAllDnsRecords } from '@layered/dns-records'
+
+// Fast - only root domain
+const records = await getAllDnsRecords('example.com', {
+  commonSubdomainsCheck: false,
+  subdomains: [] // No additional subdomains
+})
+
+console.log('Records:', records.length)
+```
+
+<Tip>
+Disabling `commonSubdomainsCheck` can reduce lookup time by 50-70% for large domains.
+</Tip>
+
+### Selective subdomain checks
+
+Only check specific subdomains you care about:
+
+```typescript
+import { getAllDnsRecords } from '@layered/dns-records'
+
+// Check only specific subdomains
+const records = await getAllDnsRecords('example.com', {
+  commonSubdomainsCheck: false,
+  subdomains: ['www', 'api', 'cdn'] // Only these
+})
+
+console.log('Targeted records:', records.length)
+```
+
+## Performance comparison
+
+Understand the trade-offs between different approaches:
+
+| Approach | Speed | Memory | Use case |
+| :------- | :---- | :----- | :------- |
+| `getDnsRecords()` | Fastest | Low | Single record type |
+| `getAllDnsRecords()` (no subdomains) | Fast | Medium | Root domain only |
+| `getAllDnsRecords()` (with subdomains) | Slow | Medium | Complete discovery |
+| `getAllDnsRecordsStream()` | Medium | Lowest | Real-time processing |
+| Parallel queries | Fast | Medium | Multiple types/domains |
+| Cached queries | Fastest | High | Repeated lookups |
+
+## Best practices
+
+Follow these recommendations for optimal performance:
+
+<Accordion title="Use the right API for your use case">
+
+- **Single record type**: Use `getDnsRecords()`
+- **All records, process later**: Use `getAllDnsRecords()`
+- **Real-time display**: Use `getAllDnsRecordsStream()`
+- **Multiple domains**: Use `Promise.all()` with parallel queries
+
+</Accordion>
+
+<Accordion title="Implement caching">
+
+- Cache DNS results based on TTL values
+- Use LRU cache for production applications
+- Clear cache when records might have changed
+- Respect DNS TTL to balance performance and accuracy
+
+</Accordion>
+
+<Accordion title="Choose the right resolver">
+
+- **Node.js**: Use `node-dns` (default)
+- **Browser**: Use `google-dns` or `cloudflare-dns`
+- **CloudFlare Workers**: Use `cloudflare-dns` (default)
+- **Need full TTL**: Use `node-dig` in Node.js
+
+</Accordion>
+
+<Accordion title="Optimize subdomain discovery">
+
+- Disable `commonSubdomainsCheck` if not needed
+- Provide specific `subdomains` array instead of checking all common ones
+- Balance between completeness and speed
+
+</Accordion>
+
+<Accordion title="Handle errors efficiently">
+
+- Use try-catch for individual queries
+- Implement fallback resolvers
+- Add timeouts for long-running queries
+- Validate domains before querying
+
+</Accordion>

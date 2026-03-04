@@ -1,0 +1,161 @@
+---
+title: DNS resolvers
+description: Learn about the five DNS resolvers available in @layered/dns-records and when to use each one
+---
+
+The library supports five different DNS resolvers to query DNS records. Each resolver has different runtime compatibility and use cases.
+
+## Available resolvers
+
+### cloudflare-dns
+
+Uses Cloudflare's DNS over HTTPS (DoH) API to query DNS records.
+
+- **Endpoint**: `https://cloudflare-dns.com/dns-query`
+- **Format**: JSON API
+- **Requirements**: Global `fetch` function
+- **Runtime compatibility**: Works in all JavaScript runtimes
+
+<Tip>
+Cloudflare DNS is a good choice for browser environments and serverless platforms like Cloudflare Workers.
+</Tip>
+
+### google-dns
+
+Uses Google's DNS over HTTPS (DoH) API to query DNS records.
+
+- **Endpoint**: `https://dns.google/resolve`
+- **Format**: JSON API
+- **Requirements**: Global `fetch` function
+- **Runtime compatibility**: Works in all JavaScript runtimes
+
+<Note>
+Google DNS is the default resolver for most runtimes that aren't Node.js or Cloudflare Workers.
+</Note>
+
+### node-dns
+
+Uses the Node.js built-in DNS module to query DNS records.
+
+- **Module**: `node:dns`
+- **API**: Uses native DNS resolution methods like `resolveAny`, `resolve4`, `resolve6`, etc.
+- **Requirements**: Node.js runtime
+- **Runtime compatibility**: Works only in Node.js
+
+<Tip>
+This is the default resolver when running in Node.js. It's fast and doesn't require external API calls.
+</Tip>
+
+### node-dig
+
+Uses the `dig` command-line tool via Node.js child process.
+
+- **Command**: Spawns `dig` process with `spawnSync`
+- **Output**: Parses dig's text output
+- **Requirements**: Node.js runtime and `dig` command installed on the system
+- **Runtime compatibility**: Works only in Node.js with dig available
+
+<Warning>
+Requires the `dig` command to be installed on the system. This resolver provides more detailed DNS information but has the overhead of spawning a child process.
+</Warning>
+
+### deno-dns
+
+Intended for Deno runtime using `Deno.resolveDns`.
+
+<Warning>
+This resolver is not yet implemented. Using it will throw an error: "Deno DNS not yet implemented".
+</Warning>
+
+## Runtime compatibility table
+
+| Resolver | Node.js | Browser | Cloudflare Workers | Deno | Bun | Notes |
+|----------|---------|---------|-------------------|------|-----|-------|
+| `cloudflare-dns` | ✓ | ✓ | ✓ | ✓ | ✓ | Requires `fetch` |
+| `google-dns` | ✓ | ✓ | ✓ | ✓ | ✓ | Requires `fetch` |
+| `node-dns` | ✓ | ✗ | ✗ | ✗ | ✓ | Node.js only |
+| `node-dig` | ✓ | ✗ | ✗ | ✗ | ✗ | Node.js + dig command |
+| `deno-dns` | ✗ | ✗ | ✗ | ✗ | ✗ | Not yet implemented |
+
+## Specifying a resolver
+
+You can specify which resolver to use when calling `getDnsRecords` or `getAllDnsRecords`:
+
+```typescript
+import { getDnsRecords, getAllDnsRecords } from '@layered/dns-records'
+
+// Use Cloudflare DNS resolver
+const txtRecords = await getDnsRecords('example.com', 'TXT', 'cloudflare-dns')
+
+// Use Google DNS resolver for all records
+const allRecords = await getAllDnsRecords('example.com', {
+  resolver: 'google-dns'
+})
+```
+
+## Automatic resolver selection
+
+If you don't specify a resolver, the library automatically selects the best one for your runtime:
+
+```typescript
+// Automatically uses:
+// - 'node-dns' in Node.js
+// - 'cloudflare-dns' in Cloudflare Workers
+// - 'google-dns' in all other environments
+const records = await getDnsRecords('example.com', 'A')
+```
+
+The selection logic from `/home/daytona/workspace/source/src/get-dns-records.ts:5`:
+
+```typescript
+function bestDnsResolverForThisRuntime(): string {
+  if (globalThis.process?.release?.name === 'node') {
+    return 'node-dns'
+  } else if (globalThis.navigator?.userAgent === 'Cloudflare-Workers') {
+    return 'cloudflare-dns'
+  } else {
+    return 'google-dns'
+  }
+}
+```
+
+## Implementation details
+
+<Accordion title="How cloudflare-dns and google-dns work">
+Both resolvers use DNS over HTTPS (DoH) APIs that return JSON responses. The library:
+
+1. Constructs a URL with the domain name and record type
+2. Makes a fetch request with appropriate headers
+3. Parses the JSON response
+4. Maps DNS type numbers (1 for A, 28 for AAAA, etc.) to type strings
+5. Normalizes record data by removing trailing dots from FQDNs
+
+See `/home/daytona/workspace/source/src/dns-resolvers.ts:33` and `:61` for implementation.
+</Accordion>
+
+<Accordion title="How node-dns works">
+The Node.js DNS module resolver uses native DNS resolution methods:
+
+- `resolveAny()` for all record types
+- `resolve4()` / `resolve6()` for A/AAAA records with TTL
+- `resolveCname()` for CNAME records
+- `resolveMx()` for MX records
+- `resolveNs()` for NS records
+- `resolveSoa()` for SOA records
+- `resolveTxt()` for TXT records
+- `resolveCaa()` for CAA records
+
+See `/home/daytona/workspace/source/src/dns-resolvers.ts:162` for implementation.
+</Accordion>
+
+<Accordion title="How node-dig works">
+The dig resolver spawns a `dig` command as a child process with optimized flags:
+
+- `+noall` - Don't display any text sections
+- `+answer` - Except the answer section
+- `+cdflag` - Skip DNSSEC checks for faster queries
+
+It then parses the text output to extract DNS records.
+
+See `/home/daytona/workspace/source/src/dns-resolvers.ts:96` for implementation.
+</Accordion>

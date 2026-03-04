@@ -1,0 +1,318 @@
+---
+title: Error handling
+description: Handle errors gracefully when working with DNS records
+---
+
+Learn how to handle common errors and edge cases when querying DNS records.
+
+## Common error scenarios
+
+The library throws errors in several scenarios that you should handle appropriately.
+
+### Invalid domain name
+
+The library validates domain names before making DNS queries.
+
+```typescript
+import { getDnsRecords } from '@layered/dns-records'
+
+try {
+  // Invalid domain format
+  const records = await getDnsRecords('not a valid domain!', 'A')
+} catch (error) {
+  console.error('Error:', error.message)
+  // Error: "not a valid domain!" is not a valid domain name
+}
+```
+
+<Accordion title="Domain validation rules">
+
+The library validates domains using these rules (from `utils.ts:8-33`):
+
+- Must have at least 2 labels (e.g., `example.com`)
+- Labels cannot start or end with hyphens
+- Labels must be 1-64 characters
+- TLD must be 2-64 characters
+- Only alphanumeric characters, hyphens, and underscores allowed
+- Trailing dots are automatically removed
+
+</Accordion>
+
+### DNS lookup failures
+
+DNS queries may fail due to network issues or invalid resolvers.
+
+```typescript
+import { getDnsRecords } from '@layered/dns-records'
+
+try {
+  const records = await getDnsRecords('example.com', 'A', 'invalid-resolver')
+} catch (error) {
+  console.error('DNS lookup failed:', error.message)
+  // Error: Invalid DNS resolver: invalid-resolver
+}
+```
+
+<Note>
+Always wrap DNS queries in try-catch blocks to handle network failures and resolver errors.
+</Note>
+
+### No records found
+
+Some domains may not have specific record types configured.
+
+```typescript
+import { getDnsRecords } from '@layered/dns-records'
+
+try {
+  const records = await getDnsRecords('example.com', 'AAAA')
+  
+  if (records.length === 0) {
+    console.log('No AAAA records found for this domain')
+  } else {
+    console.log(`Found ${records.length} AAAA records`)
+  }
+} catch (error) {
+  console.error('Error querying DNS:', error.message)
+}
+```
+
+<Tip>
+An empty array is returned when no records are found, not an error. Check the `length` property to handle this case.
+</Tip>
+
+## Recommended error handling patterns
+
+Use these patterns to handle errors gracefully in your applications.
+
+### Basic try-catch pattern
+
+Simple error handling for single queries:
+
+```typescript
+import { getDnsRecords } from '@layered/dns-records'
+
+async function lookupDns(domain: string, type: string = 'A') {
+  try {
+    const records = await getDnsRecords(domain, type)
+    return {
+      success: true,
+      records,
+      count: records.length
+    }
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message,
+      records: []
+    }
+  }
+}
+
+const result = await lookupDns('example.com', 'TXT')
+if (result.success) {
+  console.log(`Found ${result.count} records`)
+} else {
+  console.error(`Lookup failed: ${result.error}`)
+}
+```
+
+### Fallback resolver pattern
+
+Try multiple resolvers if one fails:
+
+```typescript
+import { getDnsRecords } from '@layered/dns-records'
+
+async function lookupWithFallback(domain: string, type: string = 'A') {
+  const resolvers = ['node-dns', 'cloudflare-dns', 'google-dns']
+  
+  for (const resolver of resolvers) {
+    try {
+      const records = await getDnsRecords(domain, type, resolver)
+      console.log(`Success with ${resolver}`)
+      return records
+    } catch (error) {
+      console.warn(`${resolver} failed: ${error.message}`)
+      // Try next resolver
+    }
+  }
+  
+  throw new Error(`All resolvers failed for ${domain}`)
+}
+
+try {
+  const records = await lookupWithFallback('example.com', 'A')
+  console.log('Records:', records)
+} catch (error) {
+  console.error('Complete failure:', error.message)
+}
+```
+
+### Timeout pattern
+
+Add timeouts to prevent long-running queries:
+
+```typescript
+import { getDnsRecords } from '@layered/dns-records'
+
+async function lookupWithTimeout(domain: string, type: string = 'A', timeoutMs: number = 5000) {
+  const timeoutPromise = new Promise((_, reject) => {
+    setTimeout(() => reject(new Error('DNS lookup timeout')), timeoutMs)
+  })
+  
+  try {
+    const records = await Promise.race([
+      getDnsRecords(domain, type),
+      timeoutPromise
+    ])
+    return records
+  } catch (error) {
+    console.error('Lookup failed:', error.message)
+    throw error
+  }
+}
+
+try {
+  const records = await lookupWithTimeout('example.com', 'TXT', 3000)
+  console.log('Records retrieved:', records)
+} catch (error) {
+  console.error('Failed to retrieve records:', error.message)
+}
+```
+
+## Common issues and solutions
+
+Troubleshoot common problems when working with DNS records.
+
+<Accordion title="Error: fetch is not defined">
+
+**Problem**: Using `cloudflare-dns` or `google-dns` in an environment without fetch.
+
+**Solution**: Use a Node.js-specific resolver or polyfill fetch:
+
+```typescript
+// Use node-dns in Node.js environments
+import { getDnsRecords } from '@layered/dns-records'
+
+const records = await getDnsRecords('example.com', 'A', 'node-dns')
+```
+
+</Accordion>
+
+<Accordion title="Error: dig command not found">
+
+**Problem**: Using `node-dig` resolver without dig installed.
+
+**Solution**: Install dig or use a different resolver:
+
+```bash
+# Install dig on Ubuntu/Debian
+sudo apt-get install dnsutils
+
+# Install dig on macOS
+brew install bind
+```
+
+Or use an alternative resolver:
+
+```typescript
+import { getDnsRecords } from '@layered/dns-records'
+
+// Use node-dns instead
+const records = await getDnsRecords('example.com', 'A', 'node-dns')
+```
+
+</Accordion>
+
+<Accordion title="Empty records array returned">
+
+**Problem**: No records found for the queried type.
+
+**Solution**: This is expected behavior. Check if the domain has that record type:
+
+```typescript
+import { getDnsRecords } from '@layered/dns-records'
+
+const records = await getDnsRecords('example.com', 'AAAA')
+
+if (records.length === 0) {
+  console.log('This domain does not have IPv6 (AAAA) records')
+  
+  // Try IPv4 instead
+  const aRecords = await getDnsRecords('example.com', 'A')
+  console.log('IPv4 records:', aRecords)
+}
+```
+
+</Accordion>
+
+<Accordion title="Invalid DNS record error during streaming">
+
+**Problem**: Parsing error when using streaming API.
+
+**Solution**: Ensure you decode the Uint8Array before parsing:
+
+```typescript
+import { getAllDnsRecordsStream, parseDnsRecord } from '@layered/dns-records'
+
+const stream = getAllDnsRecordsStream('example.com')
+const decoder = new TextDecoder()
+
+for await (const record of stream) {
+  try {
+    // Always decode before parsing
+    const recordLine = decoder.decode(record)
+    const dnsRecord = parseDnsRecord(recordLine)
+    console.log(dnsRecord)
+  } catch (error) {
+    console.error('Failed to parse record:', error.message)
+    // Skip invalid records
+  }
+}
+```
+
+</Accordion>
+
+## Validation before queries
+
+Validate domains before making DNS queries to catch errors early:
+
+```typescript
+import { getDnsRecords } from '@layered/dns-records'
+
+function isValidDomain(domain: string): boolean {
+  // Basic domain validation
+  const domainRegex = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,61}[a-z0-9]$/i
+  return domainRegex.test(domain)
+}
+
+async function safeDnsLookup(domain: string, type: string = 'A') {
+  // Validate before querying
+  if (!isValidDomain(domain)) {
+    return {
+      success: false,
+      error: 'Invalid domain format',
+      records: []
+    }
+  }
+  
+  try {
+    const records = await getDnsRecords(domain, type)
+    return {
+      success: true,
+      records,
+      count: records.length
+    }
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message,
+      records: []
+    }
+  }
+}
+
+const result = await safeDnsLookup('example.com', 'TXT')
+console.log(result)
+```

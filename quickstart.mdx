@@ -1,80 +1,202 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Get started with @layered/dns-records in minutes
 ---
 
-## Get started in three steps
+This guide will help you make your first DNS lookups using the library.
 
-Get your documentation site running locally and make your first customization.
+## Installation
 
-### Step 1: Set up your local environment
+First, install the library:
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+```bash
+npm install @layered/dns-records
+```
 
-### Step 2: Deploy your changes
+## Basic usage
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+The library provides two main functions:
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+- `getDnsRecords()` - Get specific DNS record types for a hostname
+- `getAllDnsRecords()` - Discover all DNS records for a domain
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+### Get specific DNS records
 
-### Step 3: Go live
+Use `getDnsRecords()` to retrieve records of a specific type:
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+<Steps>
+  <Step title="Import the function">
+    ```javascript
+    import { getDnsRecords } from '@layered/dns-records'
+    ```
+  </Step>
+
+  <Step title="Query DNS records">
+    Specify the hostname and record type:
+
+    <CodeGroup>
+    ```javascript A records
+    const aRecords = await getDnsRecords('google.com', 'A')
+    console.log('DNS A records', aRecords)
+    ```
+
+    ```javascript TXT records
+    const txtRecords = await getDnsRecords('google.com', 'TXT')
+    console.log('DNS TXT records', txtRecords)
+    ```
+
+    ```javascript MX records
+    const mxRecords = await getDnsRecords('apple.com', 'MX')
+    console.log('MX records (email servers)', mxRecords)
+    ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Process the results">
+    Each record returns an array of `DnsRecord` objects:
+
+    ```javascript
+    [
+      {
+        name: 'google.com.',
+        ttl: 608,
+        type: 'TXT',
+        data: '"v=spf1 include:_spf.google.com ~all"'
+      },
+      // ... more records
+    ]
+    ```
+  </Step>
+</Steps>
+
+### Get all DNS records
+
+Use `getAllDnsRecords()` to discover all DNS records for a domain, including subdomains:
+
+<Steps>
+  <Step title="Import the function">
+    ```javascript
+    import { getAllDnsRecords } from '@layered/dns-records'
+    ```
+  </Step>
+
+  <Step title="Discover all records">
+    Call the function with a domain name:
+
+    ```javascript
+    const allRecords = await getAllDnsRecords('x.com')
+    console.log('All DNS records', allRecords)
+    ```
+  </Step>
+
+  <Step title="Customize the discovery (optional)">
+    Configure DNS resolver, subdomain checking, and extra subdomains:
+
+    ```javascript
+    const allRecords = await getAllDnsRecords('x.com', {
+      resolver: 'cloudflare-dns',
+      commonSubdomainsCheck: true,
+      subdomains: ['extra-subdomain-to-check-for'],
+    })
+    ```
+  </Step>
+</Steps>
+
+## Complete example
+
+Here's a complete example that demonstrates both functions:
+
+```javascript
+import { getDnsRecords, getAllDnsRecords } from '@layered/dns-records'
+
+// Get specific record types
+const txtRecords = await getDnsRecords('google.com', 'TXT')
+console.log(`Found ${txtRecords.length} TXT records`)
+
+// Get MX records with specific resolver
+const mxRecords = await getDnsRecords('android.com', 'MX', 'google-dns')
+console.log(`Found ${mxRecords.length} MX records`)
+
+// Discover all DNS records
+const allRecords = await getAllDnsRecords('example.com')
+console.log(`Discovered ${allRecords.length} total DNS records`)
+
+// Advanced: Get all records with custom options
+const customRecords = await getAllDnsRecords('shopify.com', {
+  resolver: 'cloudflare-dns',
+  commonSubdomainsCheck: true,
+  subdomains: ['api', 'cdn', 'status'],
+})
+```
+
+## Expected output
+
+When you query all DNS records, you'll receive an array with various record types:
+
+```javascript
+[
+  { name: 'x.com.', ttl: 3600, type: 'NS', data: 'ns71.domaincontrol.com.' },
+  { name: 'x.com.', ttl: 3600, type: 'NS', data: 'ns72.domaincontrol.com.' },
+  { name: 'x.com.', ttl: 600, type: 'SOA', data: 'ns71.domaincontrol.com. dns.jomax.net. 2018071100 28800 7200 604800 600' },
+  { name: 'x.com.', ttl: 600, type: 'A', data: '160.153.63.10' },
+  { name: 'www.x.com.', ttl: 3600, type: 'CNAME', data: 'x.com.' },
+  { name: 'x.com.', ttl: 3600, type: 'MX', data: '10 mx-van.mail.am0.yahoodns.net.' }
+]
+```
+
+## API reference
+
+### getDnsRecords()
+
+```typescript
+getDnsRecords(
+  name: string,
+  type?: DnsRecordType,
+  resolver?: string
+): Promise<DnsRecord[]>
+```
+
+**Parameters:**
+
+- `name` (string) - Fully qualified domain name (e.g., `'google.com'` or `'mail.apple.com'`)
+- `type` (string, optional) - Record type: `'A'`, `'AAAA'`, `'TXT'`, `'MX'`, `'CNAME'`, `'NS'`, `'SOA'`, etc. Defaults to `'A'`
+- `resolver` (string, optional) - DNS resolver to use: `'cloudflare-dns'`, `'google-dns'`, `'node-dns'`, `'node-dig'`, or `'deno-dns'`. Auto-selected if not specified
+
+### getAllDnsRecords()
+
+```typescript
+getAllDnsRecords(
+  domain: string,
+  options?: GetAllDnsRecordsOptions
+): Promise<DnsRecord[]>
+```
+
+**Parameters:**
+
+- `domain` (string) - Valid domain name (e.g., `'google.com'`)
+- `options` (object, optional) - Configuration options:
+  - `resolver` (string) - Which DNS resolver to use
+  - `commonSubdomainsCheck` (boolean) - Check for common subdomains from built-in list. Default: `true`
+  - `subdomains` (string[]) - Array of extra subdomains to check for
+
+### DnsRecord type
+
+```typescript
+interface DnsRecord {
+  name: string      // Fully qualified domain name
+  type: string      // Record type: A, AAAA, CNAME, MX, TXT, etc.
+  ttl: number       // Time to live (in seconds)
+  data: string      // Record data: IP for A/AAAA, fqdn for CNAME, etc.
+}
+```
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
-
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="API Reference" icon="code" href="/api/get-dns-records">
+    Explore the complete API documentation
+  </Card>
+  <Card title="Examples" icon="flask" href="/guides/examples">
+    See more usage examples and patterns
+  </Card>
 </CardGroup>
-
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>

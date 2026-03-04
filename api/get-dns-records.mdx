@@ -1,0 +1,78 @@
+---
+title: getDnsRecords
+description: Get DNS records of a given type for a fully qualified domain name
+---
+
+## Function signature
+
+```typescript
+function getDnsRecords(
+  name: string,
+  type?: DnsRecordType,
+  resolver?: string
+): Promise<DnsRecord[]>
+```
+
+Get DNS records of a given type for a FQDN (fully qualified domain name).
+
+## Parameters
+
+<ParamField path="name" type="string" required>
+  Fully qualified domain name, like `example.com` or `mail.google.com` (no protocol or path)
+</ParamField>
+
+<ParamField path="type" type="DnsRecordType" default="undefined">
+  DNS record type: `A`, `AAAA`, `TXT`, `CNAME`, `MX`, `NS`, `SOA`, `PTR`, `SRV`, `NAPTR`, `DS`, `DNSKEY`, `CAA`, etc.
+  
+  If not specified, all record types will be queried.
+</ParamField>
+
+<ParamField path="resolver" type="string" default="auto">
+  Which DNS resolver to use for DNS lookup. Options:
+  - `cloudflare-dns` - Use Cloudflare DNS over HTTPS
+  - `google-dns` - Use Google DNS over HTTPS
+  - `node-dns` - Use Node.js built-in DNS resolver
+  - `node-dig` - Use Node.js `dig` command
+  - `deno-dns` - Use Deno DNS resolver (not yet implemented)
+  
+  If not specified, the best DNS resolver for the current runtime will be automatically selected.
+</ParamField>
+
+## Returns
+
+<ResponseField name="records" type="Promise<DnsRecord[]>">
+  A promise that resolves to an array of discovered `DnsRecord` objects.
+  
+  Each `DnsRecord` contains:
+  - `name` (string): Fully qualified domain name
+  - `type` (DnsRecordType): Record type (A, AAAA, CNAME, etc.)
+  - `ttl` (number): Time to live in seconds
+  - `data` (string): Record data (IP for A/AAAA, FQDN for CNAME, etc.)
+</ResponseField>
+
+## Examples
+
+### Get TXT records for example.com
+
+```js
+import { getDnsRecords } from '@layered/dns-records'
+
+const txtRecords = await getDnsRecords('example.com', 'TXT')
+```
+
+### Get MX records from Google DNS resolver
+
+```js
+import { getDnsRecords } from '@layered/dns-records'
+
+const mxRecords = await getDnsRecords('android.com', 'MX', 'google-dns')
+```
+
+### Get all A records with automatic resolver selection
+
+```js
+import { getDnsRecords } from '@layered/dns-records'
+
+const aRecords = await getDnsRecords('example.com', 'A')
+// Automatically uses node-dns in Node.js, cloudflare-dns in Cloudflare Workers, etc.
+```

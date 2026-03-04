@@ -1,0 +1,190 @@
+---
+title: Wildcard detection
+description: How @layered/dns-records detects and groups wildcard DNS records to reduce duplicate entries
+---
+
+Wildcard DNS records (like `*.example.com`) point all non-existent subdomains to the same destination. The library automatically detects these patterns and groups them to avoid cluttering your results with duplicate entries.
+
+## What are wildcard records?
+
+A wildcard DNS record uses an asterisk (`*`) as a subdomain label to match any subdomain that doesn't have a specific record.
+
+**Example**: If `*.example.com` points to `192.0.2.1`, then:
+- `random.example.com` → `192.0.2.1`
+- `anything.example.com` → `192.0.2.1`
+- `xyz123.example.com` → `192.0.2.1`
+
+<Note>
+Without wildcard detection, when checking hundreds of common subdomains, you'd get hundreds of duplicate records all pointing to the same IP address.
+</Note>
+
+## How detection works
+
+The `detectWildcardRecords` function analyzes all discovered DNS records and identifies patterns where many subdomains resolve to the same destination.
+
+### Detection algorithm
+
+From `/home/daytona/workspace/source/src/index.ts:255`, the algorithm:
+
+1. **Groups records by type and data**: Counts how many records of each type (A, AAAA, CNAME) point to the same data value
+
+2. **Calculates percentage**: Determines what percentage of all records of that type point to the same destination
+
+3. **Applies threshold**: If the percentage exceeds the threshold (default 15%), those records are considered wildcards
+
+4. **Creates wildcard entry**: Replaces all matching records with a single `*.domain` entry
+
+```typescript
+export function detectWildcardRecords(
+  domain: string,
+  records: DnsRecord[],
+  percent = 0.15
+): DnsRecord[]
+```
+
+## The percent parameter
+
+The `percent` parameter controls how aggressive wildcard detection is. Default is `0.15` (15%).
+
+**Lower values** (e.g., `0.1`):
+- More aggressive detection
+- Groups records more readily
+- May combine records that aren't true wildcards
+
+**Higher values** (e.g., `0.3`):
+- More conservative detection
+- Requires more records to point to the same destination
+- May miss some wildcard patterns
+
+<Tip>
+The default 15% threshold works well for most domains. Only adjust it if you're seeing too many or too few wildcard detections.
+</Tip>
+
+## Which record types are checked?
+
+Wildcard detection only applies to these record types:
+- **A** (IPv4 addresses)
+- **AAAA** (IPv6 addresses)
+- **CNAME** (aliases)
+
+Other record types (MX, TXT, NS, SOA, etc.) are never grouped as wildcards.
+
+## Examples
+
+### Basic wildcard detection
+
+```typescript
+import { detectWildcardRecords } from '@layered/dns-records'
+
+const records = [
+  { name: 'api.example.com', type: 'A', ttl: 300, data: '192.0.2.1' },
+  { name: 'app.example.com', type: 'A', ttl: 300, data: '192.0.2.1' },
+  { name: 'www.example.com', type: 'A', ttl: 300, data: '192.0.2.1' },
+  { name: 'blog.example.com', type: 'A', ttl: 300, data: '192.0.2.1' },
+  { name: 'shop.example.com', type: 'A', ttl: 300, data: '192.0.2.1' },
+  // ... 20+ more subdomains all pointing to 192.0.2.1
+]
+
+const withWildcard = detectWildcardRecords('example.com', records)
+// Returns: [{ name: '*.example.com', type: 'A', ttl: 300, data: '192.0.2.1' }]
+```
+
+### Automatic detection with getAllDnsRecords
+
+```typescript
+import { getAllDnsRecords } from '@layered/dns-records'
+
+// Wildcard detection is automatically applied
+const records = await getAllDnsRecords('example.com')
+
+// If many subdomains point to the same IP, you'll see:
+// [{ name: '*.example.com', type: 'A', ttl: 300, data: '192.0.2.1' }]
+// instead of dozens of individual subdomain records
+```
+
+### Custom threshold
+
+```typescript
+import { getAllDnsRecords } from '@layered/dns-records'
+
+const records = await getAllDnsRecords('example.com')
+
+// Apply more aggressive wildcard detection (10% threshold)
+const withWildcard = detectWildcardRecords('example.com', records, 0.1)
+```
+
+### Mixed wildcard and specific records
+
+```typescript
+const records = [
+  // These 25 subdomains all point to the same IP
+  { name: 'random1.example.com', type: 'A', ttl: 300, data: '192.0.2.1' },
+  { name: 'random2.example.com', type: 'A', ttl: 300, data: '192.0.2.1' },
+  // ... 23 more similar records
+  
+  // But this one is different
+  { name: 'mail.example.com', type: 'A', ttl: 300, data: '198.51.100.5' },
+]
+
+const withWildcard = detectWildcardRecords('example.com', records)
+// Returns:
+// [
+//   { name: '*.example.com', type: 'A', ttl: 300, data: '192.0.2.1' },
+//   { name: 'mail.example.com', type: 'A', ttl: 300, data: '198.51.100.5' }
+// ]
+```
+
+<Note>
+Records that point to different destinations than the wildcard pattern are preserved individually.
+</Note>
+
+## Implementation details
+
+The detection algorithm from `/home/daytona/workspace/source/src/index.ts:255`:
+
+```typescript
+export function detectWildcardRecords(domain: string, records: DnsRecord[], percent = 0.15): DnsRecord[] {
+  const sameDataGroup: { [key: string]: number } = {}
+  const wildcardsFound: string[] = []
+
+  // Count records with same type-data combination
+  records.forEach(record => {
+    if (['A', 'AAAA', 'CNAME'].includes(record.type)) {
+      const key = `${record.type}-${record.data}`
+      sameDataGroup[key] ||= 0
+      sameDataGroup[key]++
+    }
+  })
+
+  const recordsWithWildcard: DnsRecord[] = []
+
+  records.forEach(record => {
+    if (['A', 'AAAA', 'CNAME'].includes(record.type)) {
+      const key = `${record.type}-${record.data}`
+      const sameData = sameDataGroup[key] || 0
+      const recordTypeLength = records.filter(r => r.type === record.type).length
+
+      // If percentage is below threshold, keep individual record
+      if (sameData / recordTypeLength < percent || recordTypeLength < subdomainsRecords.length / 2) {
+        recordsWithWildcard.push(record)
+      } 
+      // Otherwise, create wildcard entry
+      else if (!wildcardsFound.includes(key)) {
+        wildcardsFound.push(key)
+        recordsWithWildcard.push({
+          ...record,
+          name: `*.${domain}`,
+        })
+      }
+    } else {
+      recordsWithWildcard.push(record)
+    }
+  })
+
+  return recordsWithWildcard
+}
+```
+
+<Warning>
+The function also checks if there are enough total records of that type. If there are fewer records than half the common subdomains list, wildcard detection is skipped to avoid false positives.
+</Warning>

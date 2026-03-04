@@ -1,0 +1,260 @@
+---
+title: Subdomain discovery
+description: How @layered/dns-records discovers subdomains from common lists, MX records, and SPF records
+---
+
+The `getAllDnsRecords` function doesn't just query the main domain—it actively discovers subdomains by checking common subdomain names, analyzing MX records, and parsing SPF records.
+
+## Discovery methods
+
+The library uses multiple strategies to find as many subdomains as possible:
+
+1. **Common subdomain list**: Checks a built-in list of 38 common subdomain names
+2. **MX record analysis**: Extracts subdomains from mail server records
+3. **SPF record parsing**: Discovers subdomains referenced in SPF TXT records
+4. **CNAME following**: Follows CNAME chains to find additional subdomains
+5. **Custom subdomain list**: Allows you to specify additional subdomains to check
+
+## Common subdomain checking
+
+By default, `getAllDnsRecords` checks these 38 common subdomain names from `/home/daytona/workspace/source/src/subdomains.ts:3`:
+
+```typescript
+const subdomainsRecords = [
+  'admin', 'analytics', 'api', 'app', 'apps', 'assets',
+  'beta', 'blog', 'bounces', 'cdn', 'cloud', 'cpanel',
+  'dashboard', 'dash', 'data', 'demo', 'dev', 'docs',
+  'edge', 'email', 'files', 'ftp', 'help', 'imap',
+  'labs', 'mail', 'mx', 'shop', 'store', 'support',
+  'test', 'testing', 'www', 'webmail'
+]
+```
+
+<Note>
+The library queries A, AAAA, and CNAME records for each of these subdomains, adding any that exist to the results.
+</Note>
+
+### Disabling common subdomain checks
+
+You can disable the built-in subdomain list:
+
+```typescript
+import { getAllDnsRecords } from '@layered/dns-records'
+
+const records = await getAllDnsRecords('example.com', {
+  commonSubdomainsCheck: false
+})
+```
+
+## Custom subdomain list
+
+Specify additional subdomains to check beyond the common list:
+
+```typescript
+import { getAllDnsRecords } from '@layered/dns-records'
+
+const records = await getAllDnsRecords('example.com', {
+  subdomains: ['internal', 'staging', 'vpn', 'extranet']
+})
+```
+
+<Tip>
+The `subdomains` option adds to the common subdomain list. To check only your custom list, also set `commonSubdomainsCheck: false`.
+</Tip>
+
+## Discovery from MX records
+
+Mail exchange records often point to subdomains of the same domain. The library automatically extracts and checks these.
+
+**Example from** `/home/daytona/workspace/source/src/index.ts:135`:
+
+```typescript
+getDnsRecords(domain, 'MX', options.resolver).then(records => {
+  records.forEach(r => {
+    if (r.data.includes(domain)) {
+      const parts = r.data.split(' ')
+      if (parts.length > 1) {
+        addSubdomain(parts[1])  // Extract hostname from "10 mail.example.com"
+      }
+    }
+  })
+  sendRecords(records)
+})
+```
+
+**Example**:
+```typescript
+// If example.com has this MX record:
+{ name: 'example.com', type: 'MX', data: '10 mail.example.com' }
+
+// The library will automatically query:
+// - mail.example.com A
+// - mail.example.com AAAA
+// - mail.example.com CNAME
+```
+
+## Discovery from SPF records
+
+Sender Policy Framework (SPF) records often reference subdomains that handle email. The library parses SPF TXT records and extracts subdomain references.
+
+**Supported SPF mechanisms from** `/home/daytona/workspace/source/src/index.ts:149`:
+- `include:subdomain.example.com`
+- `a:subdomain.example.com`
+- `mx:subdomain.example.com`
+
+**Example**:
+```typescript
+// If example.com has this TXT record:
+{ 
+  name: 'example.com', 
+  type: 'TXT', 
+  data: 'v=spf1 include:_spf.example.com a:mail.example.com mx:backup.example.com ~all'
+}
+
+// The library will automatically discover and query:
+// - _spf.example.com
+// - mail.example.com
+// - backup.example.com
+```
+
+**Implementation**:
+```typescript
+getDnsRecords(domain, 'TXT', options.resolver).then(records => {
+  records.forEach(r => {
+    // Extract subdomains from SPF records (RFC 7208)
+    if (r.data.includes('v=spf1') && r.data.includes(domain)) {
+      r.data.split(' ').forEach(spf => {
+        if (spf.startsWith('include:') && spf.endsWith(domain)) {
+          addSubdomain(spf.replace('include:', ''))
+        } else if (spf.startsWith('a:') && spf.endsWith(domain)) {
+          addSubdomain(spf.replace('a:', ''))
+        } else if (spf.startsWith('mx:') && spf.endsWith(domain)) {
+          addSubdomain(spf.replace('mx:', ''))
+        }
+      })
+    }
+  })
+  sendRecords(records)
+})
+```
+
+<Note>
+SPF record parsing follows [RFC 7208](https://datatracker.ietf.org/doc/html/rfc7208) specification.
+</Note>
+
+## Discovery from CNAME records
+
+When a CNAME record points to another subdomain of the same domain, that subdomain is automatically added to the discovery queue.
+
+**Example from** `/home/daytona/workspace/source/src/index.ts:95`:
+
+```typescript
+records.filter(record => record.type === 'CNAME').forEach(record => {
+  addSubdomain(record.data)
+})
+```
+
+**Example**:
+```typescript
+// If www.example.com points to:
+{ name: 'www.example.com', type: 'CNAME', data: 'cdn.example.com' }
+
+// The library will automatically query cdn.example.com
+```
+
+## Discovery from NS records
+
+Name server records that reference the same domain are also checked:
+
+**Example from** `/home/daytona/workspace/source/src/index.ts:125`:
+
+```typescript
+getDnsRecords(domain, 'NS', options.resolver).then(nsRecords => {
+  if (nsRecords.length) {
+    nsRecords.forEach(r => {
+      if (r.data.includes(domain)) {
+        addSubdomain(r.data)
+      }
+    })
+  }
+})
+```
+
+## Complete discovery example
+
+```typescript
+import { getAllDnsRecords } from '@layered/dns-records'
+
+// Discover all subdomains with default settings
+const records = await getAllDnsRecords('example.com')
+
+// With custom options
+const records = await getAllDnsRecords('example.com', {
+  resolver: 'google-dns',
+  commonSubdomainsCheck: true,  // Check 38 common subdomains (default: true)
+  subdomains: ['vpn', 'intranet', 'git']  // Additional custom subdomains
+})
+```
+
+## How subdomain checking works
+
+The discovery process from `/home/daytona/workspace/source/src/index.ts:72` follows this flow:
+
+1. **Initial queries**: Query NS, SOA, A, AAAA, MX, and TXT records for the main domain
+
+2. **Extract subdomains**: Parse MX and TXT (SPF) records to find referenced subdomains
+
+3. **Queue subdomains**: Add common subdomains and custom subdomains to the check queue
+
+4. **Process queue**: For each subdomain in the queue:
+   - Query A, AAAA, and CNAME records
+   - If CNAME points to another subdomain, add it to the queue
+   - Prevent duplicates with a checked set
+
+5. **Return results**: Stream or return all discovered records
+
+```typescript
+const subdomainsChecked: Set<String> = new Set()
+const subdomainsExtra: String[] = []
+
+if (options.subdomains) {
+  subdomainsExtra.push(...options.subdomains)
+}
+if (options.commonSubdomainsCheck) {
+  subdomainsExtra.push(...subdomainsRecords)
+}
+
+// Check for A, AAAA, CNAME subdomains
+while (subdomainsExtra.length) {
+  const subdomain = subdomainsExtra.shift()
+  
+  if (subdomain && !subdomainsChecked.has(subdomain)) {
+    runningChecks++
+    subdomainsChecked.add(subdomain)
+    getDnsRecords(`${subdomain}.${domain}`, undefined, options.resolver)
+      .then(records => {
+        sendRecords(records)
+        // Check for extra subdomains in CNAME records
+        records.filter(record => record.type === 'CNAME')
+               .forEach(record => addSubdomain(record.data))
+      })
+  }
+}
+```
+
+<Tip>
+Subdomain discovery is recursive—if a discovered subdomain's CNAME points to another subdomain of the same domain, that subdomain will also be checked.
+</Tip>
+
+## Performance considerations
+
+The library checks subdomains efficiently:
+
+- **Deduplication**: Each subdomain is only checked once using a `Set`
+- **Parallel queries**: Multiple subdomain checks run concurrently
+- **Scoped discovery**: Only subdomains under the target domain are checked
+- **Smart filtering**: Only adds subdomains that end with the target domain
+
+<Warning>
+Checking the default 38 common subdomains plus parsing MX/SPF records means the library may make 40+ DNS queries for a single domain. This is normal and necessary for comprehensive discovery.
+</Warning>

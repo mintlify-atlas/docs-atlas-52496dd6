@@ -1,0 +1,149 @@
+---
+title: parseDnsRecord
+description: Parse a DNS record string into a DnsRecord object
+---
+
+## Function signature
+
+```typescript
+function parseDnsRecord(
+  record: string | Uint8Array
+): DnsRecord
+```
+
+Parse a DNS record string into a structured `DnsRecord` object. This function converts tab-separated DNS record format into a typed JavaScript object.
+
+## Parameters
+
+<ParamField path="record" type="string | Uint8Array" required>
+  DNS record string in tab-separated format, or a `Uint8Array` containing the encoded string.
+  
+  Expected format:
+  ```
+  name\tttl\tIN\ttype\tdata
+  ```
+  
+  For example:
+  ```
+  example.com\t3600\tIN\tA\t93.184.216.34
+  ```
+</ParamField>
+
+## Returns
+
+<ResponseField name="record" type="DnsRecord">
+  A structured `DnsRecord` object with the following fields:
+  
+  <ResponseField name="name" type="string">
+    Fully qualified domain name (e.g., `example.com`, `mail.google.com`, `analytics.x.com`)
+  </ResponseField>
+  
+  <ResponseField name="type" type="DnsRecordType">
+    Record type: `A`, `AAAA`, `CNAME`, `MX`, `TXT`, `NS`, `SOA`, etc.
+  </ResponseField>
+  
+  <ResponseField name="ttl" type="number">
+    Time to live in seconds for this record
+  </ResponseField>
+  
+  <ResponseField name="data" type="string">
+    Record data:
+    - IP address for A or AAAA records
+    - FQDN for CNAME records
+    - Priority and hostname for MX records
+    - Text content for TXT records
+    - etc.
+  </ResponseField>
+</ResponseField>
+
+## Record format specification
+
+The input string must follow this tab-separated format:
+
+1. **name** - Fully qualified domain name
+2. **ttl** - Time to live (numeric, in seconds)
+3. **IN** - Internet class (must be "IN")
+4. **type** - Record type (A, AAAA, CNAME, MX, TXT, etc.)
+5. **data** - Record data
+
+The function validates that:
+- The record has at least 5 tab-separated parts
+- The third field is "IN" (Internet class)
+
+If the record format is invalid, an error is thrown.
+
+## Examples
+
+### Parse a string DNS record
+
+```js
+import { parseDnsRecord } from '@layered/dns-records'
+
+const recordString = 'example.com\t3600\tIN\tA\t93.184.216.34'
+const record = parseDnsRecord(recordString)
+
+console.log(record)
+// {
+//   name: 'example.com',
+//   type: 'A',
+//   ttl: 3600,
+//   data: '93.184.216.34'
+// }
+```
+
+### Parse a Uint8Array DNS record
+
+```js
+import { parseDnsRecord } from '@layered/dns-records'
+
+const encoder = new TextEncoder()
+const recordBytes = encoder.encode('example.com\t300\tIN\tAAAA\t2606:2800:220:1:248:1893:25c8:1946')
+const record = parseDnsRecord(recordBytes)
+
+console.log(record)
+// {
+//   name: 'example.com',
+//   type: 'AAAA',
+//   ttl: 300,
+//   data: '2606:2800:220:1:248:1893:25c8:1946'
+// }
+```
+
+### Parse MX record
+
+```js
+import { parseDnsRecord } from '@layered/dns-records'
+
+const record = parseDnsRecord('example.com\t3600\tIN\tMX\t10 mail.example.com')
+
+console.log(record.data)  // '10 mail.example.com'
+```
+
+### Parse CNAME record
+
+```js
+import { parseDnsRecord } from '@layered/dns-records'
+
+const record = parseDnsRecord('www.example.com\t3600\tIN\tCNAME\texample.com')
+
+console.log(record)
+// {
+//   name: 'www.example.com',
+//   type: 'CNAME',
+//   ttl: 3600,
+//   data: 'example.com'
+// }
+```
+
+### Error handling for invalid format
+
+```js
+import { parseDnsRecord } from '@layered/dns-records'
+
+try {
+  const record = parseDnsRecord('invalid-record-format')
+} catch (error) {
+  console.error(error.message)
+  // 'Invalid DNS record: invalid-record-format'
+}
+```

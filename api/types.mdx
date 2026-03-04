@@ -1,0 +1,200 @@
+---
+title: Types
+description: TypeScript type definitions for DNS records
+---
+
+## DnsRecord
+
+DNS Record object representing a single DNS record with type, TTL, and value.
+
+```typescript
+interface DnsRecord {
+  name: string
+  type: DnsRecordType
+  ttl: number
+  data: string
+}
+```
+
+### Fields
+
+<ResponseField name="name" type="string" required>
+  Fully qualified domain name (FQDN).
+  
+  Examples: `example.com`, `mail.google.com`, `analytics.x.com`
+</ResponseField>
+
+<ResponseField name="type" type="DnsRecordType" required>
+  Record type: A, AAAA, CNAME, MX, TXT, etc.
+  
+  See [DnsRecordType](#dnsrecordtype) for all supported types.
+</ResponseField>
+
+<ResponseField name="ttl" type="number" required>
+  Time to live (in seconds) for this record.
+  
+  This indicates how long the record should be cached by DNS resolvers.
+</ResponseField>
+
+<ResponseField name="data" type="string" required>
+  Record data. The format depends on the record type:
+  
+  - **A**: IPv4 address (e.g., `93.184.216.34`)
+  - **AAAA**: IPv6 address (e.g., `2606:2800:220:1:248:1893:25c8:1946`)
+  - **CNAME**: Target FQDN (e.g., `example.com`)
+  - **MX**: Priority and mail server (e.g., `10 mail.example.com`)
+  - **TXT**: Text content (e.g., `v=spf1 include:_spf.example.com ~all`)
+  - **NS**: Nameserver FQDN (e.g., `ns1.example.com`)
+  - **SOA**: Start of authority data
+  - **SRV**: Service location data
+  - **CAA**: Certificate authority authorization
+</ResponseField>
+
+### Example
+
+```typescript
+const record: DnsRecord = {
+  name: 'example.com',
+  type: 'A',
+  ttl: 3600,
+  data: '93.184.216.34'
+}
+```
+
+## DnsRecordType
+
+The type of a DNS record.
+
+```typescript
+type DnsRecordType = 
+  | 'A' 
+  | 'NS' 
+  | 'CNAME' 
+  | 'SOA' 
+  | 'PTR' 
+  | 'MX' 
+  | 'TXT' 
+  | 'SIG' 
+  | 'KEY' 
+  | 'AAAA' 
+  | 'SRV' 
+  | 'NAPTR' 
+  | 'DS' 
+  | 'DNSKEY' 
+  | 'CAA'
+```
+
+### Supported record types
+
+<ResponseField name="A" type="string">
+  IPv4 address record. Maps a domain name to an IPv4 address.
+</ResponseField>
+
+<ResponseField name="AAAA" type="string">
+  IPv6 address record. Maps a domain name to an IPv6 address.
+</ResponseField>
+
+<ResponseField name="CNAME" type="string">
+  Canonical name record. Creates an alias from one domain name to another.
+</ResponseField>
+
+<ResponseField name="MX" type="string">
+  Mail exchange record. Specifies mail servers for the domain.
+</ResponseField>
+
+<ResponseField name="TXT" type="string">
+  Text record. Holds arbitrary text data, often used for verification and configuration.
+</ResponseField>
+
+<ResponseField name="NS" type="string">
+  Nameserver record. Specifies authoritative nameservers for the domain.
+</ResponseField>
+
+<ResponseField name="SOA" type="string">
+  Start of authority record. Contains administrative information about the DNS zone.
+</ResponseField>
+
+<ResponseField name="PTR" type="string">
+  Pointer record. Used for reverse DNS lookups.
+</ResponseField>
+
+<ResponseField name="SRV" type="string">
+  Service record. Defines location of services.
+</ResponseField>
+
+<ResponseField name="CAA" type="string">
+  Certificate authority authorization record. Specifies which CAs can issue certificates.
+</ResponseField>
+
+<ResponseField name="NAPTR" type="string">
+  Naming authority pointer record. Used for ENUM and other applications.
+</ResponseField>
+
+<ResponseField name="DS" type="string">
+  Delegation signer record. Used in DNSSEC.
+</ResponseField>
+
+<ResponseField name="DNSKEY" type="string">
+  DNS public key record. Used in DNSSEC.
+</ResponseField>
+
+<ResponseField name="SIG" type="string">
+  Signature record. Used in DNSSEC (legacy).
+</ResponseField>
+
+<ResponseField name="KEY" type="string">
+  Public key record (legacy).
+</ResponseField>
+
+## GetAllDnsRecordsOptions
+
+Options for discovering DNS records with `getAllDnsRecords` and `getAllDnsRecordsStream`.
+
+```typescript
+type GetAllDnsRecordsOptions = {
+  resolver?: 'cloudflare-dns' | 'google-dns' | 'node-dns' | 'node-dig' | 'deno-dns'
+  commonSubdomainsCheck?: boolean
+  subdomains?: string[]
+}
+```
+
+### Fields
+
+<ResponseField name="resolver" type="string">
+  Which DNS resolver to use for DNS lookup.
+  
+  Options:
+  - `cloudflare-dns` - Cloudflare DNS over HTTPS (best for Cloudflare Workers)
+  - `google-dns` - Google DNS over HTTPS (best for browsers and Deno)
+  - `node-dns` - Node.js built-in DNS resolver (best for Node.js)
+  - `node-dig` - Node.js `dig` command wrapper
+  - `deno-dns` - Deno DNS resolver (not yet implemented)
+  
+  If not specified, the best resolver for the current runtime is automatically selected.
+</ResponseField>
+
+<ResponseField name="commonSubdomainsCheck" type="boolean" default={true}>
+  Check for common subdomains from the built-in list.
+  
+  When enabled (default), the library will check a predefined list of common subdomains like `www`, `mail`, `api`, `dev`, `staging`, etc.
+  
+  Set to `false` to disable common subdomain checking and only query the base domain.
+</ResponseField>
+
+<ResponseField name="subdomains" type="string[]" default={[]}>
+  List of extra subdomains to check for beyond the built-in common subdomains list.
+  
+  Example: `['api', 'staging', 'dev', 'internal']`
+  
+  These subdomains will be checked in addition to the common subdomains (if `commonSubdomainsCheck` is enabled).
+</ResponseField>
+
+### Example
+
+```typescript
+const options: GetAllDnsRecordsOptions = {
+  resolver: 'cloudflare-dns',
+  commonSubdomainsCheck: true,
+  subdomains: ['api', 'staging', 'internal']
+}
+```

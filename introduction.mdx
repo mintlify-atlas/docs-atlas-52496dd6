@@ -1,0 +1,50 @@
+---
+title: Introduction
+description: A DNS helper library that discovers and retrieves all DNS records for any domain
+---
+
+**@layered/dns-records** is a DNS helper library that can quickly discover and retrieve all DNS records for a domain.
+
+## What it does
+
+This library provides simple, cross-runtime DNS record lookup and discovery capabilities. It can retrieve specific DNS record types (like A, TXT, or MX records) or discover all DNS records associated with a domain, including subdomains.
+
+## Key features
+
+<CardGroup cols={2}>
+  <Card title="Cross-runtime support" icon="globe">
+    Works seamlessly in browsers, Node.js, CloudFlare Workers, Deno, and Bun
+  </Card>
+  <Card title="Automatic discovery" icon="magnifying-glass">
+    Discovers almost all A, AAAA, CNAME, and TXT records for a domain with option to specify extra subdomains
+  </Card>
+  <Card title="Multiple DNS resolvers" icon="server">
+    Choose from Cloudflare DNS, Google DNS, Node.js native DNS, dig command, or Deno DNS
+  </Card>
+  <Card title="Wildcard detection" icon="asterisk">
+    Automatically detects and handles wildcard (*) DNS records
+  </Card>
+</CardGroup>
+
+## Use cases
+
+- **Domain analysis**: Discover all DNS records associated with a domain for security audits or infrastructure mapping
+- **DNS verification**: Verify TXT records for domain ownership, SPF, DKIM, or other DNS-based authentication
+- **Email server lookup**: Find MX records to identify mail servers for a domain
+- **Subdomain enumeration**: Automatically discover subdomains through DNS record analysis
+- **Multi-platform apps**: Build DNS tools that work across different JavaScript runtimes
+
+## Live demo
+
+See the library in action at [dmns.app](https://dmns.app) or try the [Domain Info Chrome extension](https://chromewebstore.google.com/detail/domain-info/afbepfhknfficaflckmgflbmklcleidl).
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install the library in your project
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Get started with your first DNS lookup
+  </Card>
+</CardGroup>

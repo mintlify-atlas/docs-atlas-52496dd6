@@ -1,0 +1,155 @@
+---
+title: getAllDnsRecordsStream
+description: Discover all DNS records for a domain and stream each record as it's discovered
+---
+
+## Function signature
+
+```typescript
+function getAllDnsRecordsStream(
+  domain: string,
+  options?: GetAllDnsRecordsOptions
+): ReadableStream
+```
+
+Discover all DNS records for a domain name and stream each record as a text line in real-time as it's discovered. This is useful for:
+- Processing large result sets without waiting for all records
+- Streaming results to a file or network connection
+- Building live progress indicators
+
+## Parameters
+
+<ParamField path="domain" type="string" required>
+  Valid domain name, without subdomain or protocol. For example: `example.com`, not `https://www.example.com`
+</ParamField>
+
+<ParamField path="options" type="GetAllDnsRecordsOptions">
+  Options for DNS resolver, extra subdomains to check, etc.
+  
+  <ParamField path="options.resolver" type="string" default="auto">
+    Which DNS resolver to use for DNS lookup. Options:
+    - `cloudflare-dns`
+    - `google-dns`
+    - `node-dns`
+    - `node-dig`
+    - `deno-dns`
+  </ParamField>
+  
+  <ParamField path="options.commonSubdomainsCheck" type="boolean" default={true}>
+    Check for common subdomains from the built-in list.
+  </ParamField>
+  
+  <ParamField path="options.subdomains" type="string[]" default={[]}>
+    List of extra subdomains to check for.
+  </ParamField>
+</ParamField>
+
+## Returns
+
+<ResponseField name="stream" type="ReadableStream">
+  A `ReadableStream` of DNS records. Each chunk in the stream is a `Uint8Array` containing a tab-separated DNS record line in the format:
+  
+  ```
+  name\tttl\tIN\ttype\tdata
+  ```
+  
+  For example:
+  ```
+  example.com\t3600\tIN\tA\t93.184.216.34
+  ```
+</ResponseField>
+
+## Record format
+
+Each record in the stream is formatted as a tab-separated line with five fields:
+
+1. **name** - Fully qualified domain name
+2. **ttl** - Time to live in seconds
+3. **IN** - Internet class (always "IN")
+4. **type** - Record type (A, AAAA, CNAME, MX, etc.)
+5. **data** - Record data
+
+## Examples
+
+### Read stream and collect all records
+
+```js
+import { getAllDnsRecordsStream } from '@layered/dns-records'
+
+const stream = getAllDnsRecordsStream('example.com')
+const reader = stream.getReader()
+const records = []
+
+while (true) {
+  const { done, value } = await reader.read()
+  
+  if (done) break
+  
+  const recordLine = new TextDecoder().decode(value)
+  records.push(recordLine)
+}
+
+console.log(`Found ${records.length} DNS records`)
+```
+
+### Stream records to console in real-time
+
+```js
+import { getAllDnsRecordsStream, parseDnsRecord } from '@layered/dns-records'
+
+const stream = getAllDnsRecordsStream('example.com', {
+  resolver: 'cloudflare-dns',
+})
+
+const reader = stream.getReader()
+
+while (true) {
+  const { done, value } = await reader.read()
+  
+  if (done) break
+  
+  const record = parseDnsRecord(value)
+  console.log(`${record.type} ${record.name} -> ${record.data}`)
+}
+```
+
+### Process stream with async iteration
+
+```js
+import { getAllDnsRecordsStream } from '@layered/dns-records'
+
+const stream = getAllDnsRecordsStream('example.com', {
+  subdomains: ['api', 'www'],
+  commonSubdomainsCheck: true,
+})
+
+for await (const chunk of stream) {
+  const recordLine = new TextDecoder().decode(chunk)
+  // Process each record as it arrives
+  console.log(recordLine)
+}
+```
+
+### Write stream directly to a file
+
+```js
+import { getAllDnsRecordsStream } from '@layered/dns-records'
+import { createWriteStream } from 'fs'
+
+const stream = getAllDnsRecordsStream('example.com')
+const fileStream = createWriteStream('dns-records.txt')
+
+const reader = stream.getReader()
+
+while (true) {
+  const { done, value } = await reader.read()
+  
+  if (done) {
+    fileStream.end()
+    break
+  }
+  
+  fileStream.write(value)
+  fileStream.write('\n')
+}
+```

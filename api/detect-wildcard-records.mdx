@@ -1,0 +1,108 @@
+---
+title: detectWildcardRecords
+description: Detect wildcard DNS records and group them
+---
+
+## Function signature
+
+```typescript
+function detectWildcardRecords(
+  domain: string,
+  records: DnsRecord[],
+  percent?: number
+): DnsRecord[]
+```
+
+Detect wildcard DNS records in an array of DNS records and return a new array with wildcard records grouped together. This function analyzes A, AAAA, and CNAME records to identify patterns that suggest wildcard DNS configuration.
+
+## How it works
+
+The algorithm:
+
+1. Groups A, AAAA, and CNAME records by their data value
+2. Calculates what percentage of records of the same type share the same data
+3. If the percentage exceeds the threshold (default 15%), those records are likely from a wildcard DNS entry
+4. Replaces individual wildcard records with a single `*.domain` record
+5. Returns all other records unchanged
+
+For example, if you query 100 random subdomains and 80 of them return the same A record pointing to `192.0.2.1`, this suggests a wildcard A record exists for `*.example.com -> 192.0.2.1`.
+
+## Parameters
+
+<ParamField path="domain" type="string" required>
+  Domain name to use for the wildcard pattern (e.g., `example.com`)
+</ParamField>
+
+<ParamField path="records" type="DnsRecord[]" required>
+  Array of DNS records to analyze for wildcard patterns
+</ParamField>
+
+<ParamField path="percent" type="number" default={0.15}>
+  Percentage threshold (as a decimal) of records with the same data to consider a wildcard. Default is `0.15` (15%).
+  
+  - Lower values (e.g., `0.10`) are more aggressive and may group legitimate records
+  - Higher values (e.g., `0.25`) are more conservative and may miss some wildcards
+</ParamField>
+
+## Returns
+
+<ResponseField name="records" type="DnsRecord[]">
+  Array of DNS records with wildcard records grouped as `*.domain`.
+  
+  Wildcard records will have their `name` field set to `*.domain` (e.g., `*.example.com`). All other fields (type, ttl, data) remain unchanged.
+</ResponseField>
+
+## Examples
+
+### Detect wildcards with default threshold
+
+```js
+import { detectWildcardRecords } from '@layered/dns-records'
+
+const records = [
+  { name: 'api.example.com', type: 'A', ttl: 3600, data: '192.0.2.1' },
+  { name: 'www.example.com', type: 'A', ttl: 3600, data: '192.0.2.1' },
+  { name: 'blog.example.com', type: 'A', ttl: 3600, data: '192.0.2.1' },
+  { name: 'shop.example.com', type: 'A', ttl: 3600, data: '192.0.2.1' },
+  { name: 'mail.example.com', type: 'A', ttl: 3600, data: '198.51.100.1' },
+]
+
+const grouped = detectWildcardRecords('example.com', records)
+// Returns:
+// [
+//   { name: '*.example.com', type: 'A', ttl: 3600, data: '192.0.2.1' },
+//   { name: 'mail.example.com', type: 'A', ttl: 3600, data: '198.51.100.1' },
+// ]
+```
+
+### Use a custom threshold
+
+```js
+import { detectWildcardRecords } from '@layered/dns-records'
+
+const records = [
+  { name: 'a.example.com', type: 'A', ttl: 300, data: '192.0.2.5' },
+  { name: 'b.example.com', type: 'A', ttl: 300, data: '192.0.2.5' },
+  { name: 'c.example.com', type: 'A', ttl: 300, data: '192.0.2.6' },
+]
+
+// More aggressive wildcard detection (10% threshold)
+const grouped = detectWildcardRecords('example.com', records, 0.10)
+```
+
+### Preserve non-wildcard record types
+
+```js
+import { detectWildcardRecords } from '@layered/dns-records'
+
+const records = [
+  { name: 'example.com', type: 'NS', ttl: 3600, data: 'ns1.example.com' },
+  { name: 'example.com', type: 'MX', ttl: 3600, data: '10 mail.example.com' },
+  { name: 'api.example.com', type: 'A', ttl: 3600, data: '192.0.2.1' },
+  { name: 'www.example.com', type: 'A', ttl: 3600, data: '192.0.2.1' },
+]
+
+const grouped = detectWildcardRecords('example.com', records)
+// NS and MX records are always preserved
+// Only A, AAAA, and CNAME records are analyzed for wildcards
+```

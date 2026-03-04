@@ -1,0 +1,181 @@
+---
+title: Examples
+description: Real-world examples of using @layered/dns-records
+---
+
+Explore practical examples demonstrating different use cases for DNS record lookups.
+
+## Getting specific record types
+
+Retrieve DNS records by type for any domain.
+
+<CodeGroup>
+
+```typescript A records
+import { type DnsRecord, getDnsRecords } from '@layered/dns-records'
+
+const domain = 'apple.com'
+
+const aRecords: DnsRecord[] = await getDnsRecords(domain, 'A')
+
+console.log(`A records for ${domain}`)
+console.log(aRecords)
+```
+
+```typescript TXT records
+import { type DnsRecord, getDnsRecords } from '@layered/dns-records'
+
+const domain = 'amazon.com'
+
+const txtRecords: DnsRecord[] = await getDnsRecords(domain, 'TXT', 'node-dig')
+
+console.log(`TXT records for ${domain}`)
+console.log(txtRecords)
+```
+
+```typescript MX records
+import { type DnsRecord, getDnsRecords } from '@layered/dns-records'
+
+const domain = 'apple.com'
+
+const mxRecords: DnsRecord[] = await getDnsRecords(domain, 'MX')
+
+console.log(`${mxRecords.length} MX records (email servers) for ${domain}`)
+console.log(mxRecords)
+```
+
+</CodeGroup>
+
+## Verifying DNS records
+
+Check for specific DNS record values, such as SPF records for email authentication.
+
+```typescript
+import { type DnsRecord, getDnsRecords } from '@layered/dns-records'
+
+const domain = 'example.com'
+
+const txtRecords: DnsRecord[] = await getDnsRecords(domain, 'TXT')
+
+console.log(`${txtRecords.length} TXT records found for ${domain}`)
+console.log(txtRecords)
+
+const txtSpfRecord = txtRecords.find(r => r.data.includes('v=spf1'))
+
+console.log(`SPF record:`, txtSpfRecord ? '✅ found' : '❌ not found')
+```
+
+<Tip>
+Use the `find()` method to locate specific records by their data content, such as SPF, DKIM, or DMARC records.
+</Tip>
+
+## Getting all DNS records
+
+Discover all DNS records for a domain with a single function call.
+
+<CodeGroup>
+
+```typescript Basic usage
+import { type DnsRecord, getAllDnsRecords } from '@layered/dns-records'
+
+const allDnsRecords: DnsRecord[] = await getAllDnsRecords('example.com')
+
+console.log(allDnsRecords)
+console.log(allDnsRecords.length)
+```
+
+```typescript With wildcard detection
+import { getAllDnsRecords } from '@layered/dns-records'
+
+const domain = 'wordpress.org'
+
+const allDnsRecords = await getAllDnsRecords(domain)
+
+console.log(`${allDnsRecords.length} DNS Records found for ${domain}`)
+console.log(allDnsRecords)
+```
+
+</CodeGroup>
+
+<Note>
+The `getAllDnsRecords()` function automatically discovers subdomains and detects wildcard records.
+</Note>
+
+## Using different DNS resolvers
+
+Specify which DNS resolver to use for queries.
+
+```typescript
+import { DnsRecord, getAllDnsRecords } from '@layered/dns-records'
+
+const domain = 'render.com'
+
+const dnsRecords = await getAllDnsRecords(domain, {
+  resolver: 'node-dig',
+})
+
+console.log(dnsRecords)
+console.log(`${dnsRecords.length} DNS Records found ${domain} 👆`)
+```
+
+<Accordion title="Available DNS resolvers">
+
+| Name | Runtime compatibility | Notes |
+| :--- | :-------------------- | :---- |
+| `cloudflare-dns` | Works on all | Requires `fetch` as global |
+| `google-dns` | Works on all | Requires `fetch` as global |
+| `node-dns` | Works only in Node.js | Uses Node.js DNS module |
+| `node-dig` | Works only in Node.js | Uses `dig` command |
+| `deno-dns` | Works only in Deno | Uses Deno.resolveDns |
+
+</Accordion>
+
+## Streaming DNS records
+
+Process DNS records as they're discovered using the streaming API.
+
+```typescript
+import { type DnsRecord, getAllDnsRecordsStream, parseDnsRecord } from '@layered/dns-records'
+
+// get the DNS Records stream. Notice await is not needed
+const dnsRecordsStream = getAllDnsRecordsStream('shopify.com')
+
+// decoder to convert the Uint8Array to a string
+const decoder = new TextDecoder()
+
+for await (const record of dnsRecordsStream) {
+  // record is a Uint8Array, so we need to convert it to a string
+  const dnsRecordLine = decoder.decode(record)
+  console.log('DNS line', dnsRecordLine)
+
+  // parse the DNS record line to a DnsRecord object
+  const dnsRecord: DnsRecord = parseDnsRecord(dnsRecordLine)
+  //console.log('DNS object', dnsRecord)
+}
+```
+
+<Tip>
+Use streaming when you need to process records immediately as they're discovered, rather than waiting for all records to be retrieved.
+</Tip>
+
+## Advanced options
+
+Customize subdomain discovery with additional options.
+
+```typescript
+import { getAllDnsRecords } from '@layered/dns-records'
+
+const allRecords = await getAllDnsRecords('x.com', {
+  resolver: 'cloudflare-dns',
+  commonSubdomainsCheck: true,
+  subdomains: ['extra-subdomain-to-check-for'],
+})
+
+console.log('DNS all records', allRecords)
+```
+
+### Options explained
+
+- `resolver` - Which DNS resolver to use (defaults to best for current runtime)
+- `commonSubdomainsCheck` - Check for common subdomains like www, api, mail (default: `true`)
+- `subdomains` - Additional subdomains to check beyond the common ones

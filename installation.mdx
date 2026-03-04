@@ -1,0 +1,60 @@
+---
+title: Installation
+description: Install @layered/dns-records in your JavaScript project
+---
+
+Install the library using your preferred package manager:
+
+<CodeGroup>
+
+```bash npm
+npm install @layered/dns-records
+```
+
+```bash yarn
+yarn add @layered/dns-records
+```
+
+```bash pnpm
+pnpm add @layered/dns-records
+```
+
+```bash bun
+bun add @layered/dns-records
+```
+
+</CodeGroup>
+
+## Deno installation
+
+For Deno projects, you can import directly from JSR:
+
+```typescript deno
+import { getDnsRecords, getAllDnsRecords } from 'jsr:@layered/dns-records'
+```
+
+<Note>
+  The library works across all JavaScript runtimes including browsers, Node.js, CloudFlare Workers, Deno, and Bun.
+</Note>
+
+## DNS resolvers
+
+The library automatically selects the best DNS resolver for your runtime environment:
+
+| Resolver | JavaScript Runtime | Notes |
+|:---------|:-------------------|:------|
+| `cloudflare-dns` | Works on all | Requires `fetch` as global |
+| `google-dns` | Works on all | Requires `fetch` as global |
+| `node-dns` | Node.js only | Uses [Node.js DNS module](https://nodejs.org/api/dns.html) |
+| `node-dig` | Node.js only | Uses [`dig` command](https://www.ibm.com/docs/en/aix/7.3?topic=d-dig-command) |
+| `deno-dns` | Deno only | Uses [Deno.resolveDns](https://deno.land/api?s=Deno.resolveDns) |
+
+<Tip>
+  You can explicitly specify which resolver to use when calling DNS lookup functions. The library will auto-select the best option if you don't specify one.
+</Tip>
+
+## Next steps
+
+<Card title="Quickstart" icon="rocket" href="/quickstart">
+  Learn how to make your first DNS lookup
+</Card>

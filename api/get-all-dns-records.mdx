@@ -1,0 +1,104 @@
+---
+title: getAllDnsRecords
+description: Discover all DNS records for a domain name and return an array of records
+---
+
+## Function signature
+
+```typescript
+function getAllDnsRecords(
+  domain: string,
+  options?: GetAllDnsRecordsOptions
+): Promise<DnsRecord[]>
+```
+
+Discover all DNS records for a domain name and return an array of records. This function automatically:
+- Queries multiple record types (NS, SOA, A, AAAA, MX, TXT)
+- Checks common subdomains from a built-in list
+- Discovers subdomains from DNS records (MX, CNAME, SPF in TXT)
+- Detects and groups wildcard records
+
+## Parameters
+
+<ParamField path="domain" type="string" required>
+  Valid domain name, without subdomain or protocol. For example: `example.com`, not `https://www.example.com`
+</ParamField>
+
+<ParamField path="options" type="GetAllDnsRecordsOptions">
+  Options for DNS resolver, extra subdomains to check, etc.
+  
+  <ParamField path="options.resolver" type="string" default="auto">
+    Which DNS resolver to use for DNS lookup. Options:
+    - `cloudflare-dns`
+    - `google-dns`
+    - `node-dns`
+    - `node-dig`
+    - `deno-dns`
+    
+    If not specified, the best resolver for the current runtime is selected automatically.
+  </ParamField>
+  
+  <ParamField path="options.commonSubdomainsCheck" type="boolean" default={true}>
+    Check for common subdomains from the built-in list. Enabled by default.
+  </ParamField>
+  
+  <ParamField path="options.subdomains" type="string[]" default={[]}>
+    List of extra subdomains to check for beyond the built-in common subdomains list.
+  </ParamField>
+</ParamField>
+
+## Returns
+
+<ResponseField name="records" type="Promise<DnsRecord[]>">
+  A promise that resolves to an array of all `DnsRecord` objects discovered for the domain, with wildcard records detected and grouped.
+  
+  Each `DnsRecord` contains:
+  - `name` (string): Fully qualified domain name
+  - `type` (DnsRecordType): Record type
+  - `ttl` (number): Time to live in seconds
+  - `data` (string): Record data
+</ResponseField>
+
+## Examples
+
+### Get all DNS records with default options
+
+```js
+import { getAllDnsRecords } from '@layered/dns-records'
+
+const records = await getAllDnsRecords('example.com')
+// Returns all discovered DNS records with automatic resolver selection
+```
+
+### Get all DNS records from Cloudflare DNS resolver
+
+```js
+import { getAllDnsRecords } from '@layered/dns-records'
+
+const records = await getAllDnsRecords('example.com', {
+  resolver: 'cloudflare-dns',
+})
+```
+
+### Get all DNS records with custom subdomains
+
+```js
+import { getAllDnsRecords } from '@layered/dns-records'
+
+const records = await getAllDnsRecords('example.com', {
+  subdomains: ['api', 'staging', 'dev'],
+  commonSubdomainsCheck: true,
+})
+// Checks custom subdomains plus the built-in common subdomains list
+```
+
+### Disable common subdomains check
+
+```js
+import { getAllDnsRecords } from '@layered/dns-records'
+
+const records = await getAllDnsRecords('example.com', {
+  commonSubdomainsCheck: false,
+})
+// Only checks the base domain, no subdomain enumeration
+```
